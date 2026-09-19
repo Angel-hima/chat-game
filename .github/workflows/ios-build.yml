@@ -53,16 +53,39 @@ jobs:
 
       - name: Package IPA
         run: |
-          cd client/ios/App/build/App.xcarchive/Products/Applications
-          mkdir -p Payload
-          cp -r App.app Payload/
-          zip -r ../../../../../App.ipa Payload
-          cd ../../../../../
-          ls -la App.ipa
+          ARCHIVE_PATH="${{ github.workspace }}/client/ios/App/build/App.xcarchive"
+          APP_PATH="$ARCHIVE_PATH/Products/Applications/App.app"
+          
+          echo "Looking for App.app at: $APP_PATH"
+          if [ -d "$APP_PATH" ]; then
+            echo "Found App.app! Packaging to IPA..."
+            mkdir -p ${{ github.workspace }}/Payload
+            cp -r "$APP_PATH" ${{ github.workspace }}/Payload/
+            cd ${{ github.workspace }}
+            zip -r App.ipa Payload
+            echo "=== IPA Created Successfully ==="
+            ls -lh App.ipa
+          else
+            echo "App.app not found directly. Searching inside archive:"
+            find "$ARCHIVE_PATH" -name "*.app"
+            APP_FOUND=$(find "$ARCHIVE_PATH" -name "*.app" | head -n 1)
+            if [ -n "$APP_FOUND" ]; then
+              echo "Using found app: $APP_FOUND"
+              mkdir -p ${{ github.workspace }}/Payload
+              cp -r "$APP_FOUND" ${{ github.workspace }}/Payload/
+              cd ${{ github.workspace }}
+              zip -r App.ipa Payload
+              ls -lh App.ipa
+            else
+              echo "Fatal: No .app found in archive"
+              exit 1
+            fi
+          fi
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: chat-game-ios-ipa
-          path: App.ipa
+          path: ${{ github.workspace }}/App.ipa
+          if-no-files-found: error
           retention-days: 14
