@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Builds & Outputs
+client/dist/
+client/dist-electron/
+release/
+server/dist/
+
+# iOS Pods & build
+client/ios/App/Pods/
+client/ios/App/build/
+client/ios/App/.build/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# Server Data (test logs/feedbacks)
+server/data/feedbacks.json
+
+# Logs & Environment
+*.log
+.env
+.env.local
+
+# OS Files
+.DS_Store
+Thumbs.db

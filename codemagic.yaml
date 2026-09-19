@@ -1,0 +1,46 @@
+workflows:
+  ios-release:
+    name: iOS App Store Release Build
+    instance_type: mac_mini_m1
+    max_build_duration: 60
+    environment:
+      node: 20
+      xcode: latest
+      cocoapods: default
+      groups:
+        - app_store_credentials # Codemagicダッシュボードで設定する環境変数グループ
+    scripts:
+      - name: Install dependencies
+        script: |
+          cd client
+          npm install
+      - name: Build Web App
+        script: |
+          cd client
+          npm run build
+      - name: Sync Capacitor iOS
+        script: |
+          cd client
+          npx cap sync ios
+      - name: Install CocoaPods
+        script: |
+          cd client/ios/App
+          pod install
+      - name: Set up code signing settings on Xcode project
+        script: |
+          xcode-project use-profiles
+      - name: Build ipa for App Store
+        script: |
+          cd client/ios/App
+          xcode-project build-ipa \
+            --workspace "App.xcworkspace" \
+            --scheme "App"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - client/ios/App/build/Release-iphoneos/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false
