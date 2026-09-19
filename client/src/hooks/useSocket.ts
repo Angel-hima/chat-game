@@ -1,6 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { Capacitor } from '@capacitor/core';
 import { Room, PublicRoomSummary, ChatMessage, ReactionStamp, CommunityPost, Announcement, Feedback } from '../types';
+
+// 開発PCのローカルネットワークIP（モバイル端末の自動接続先）
+const DEFAULT_LAN_SERVER_URL = 'http://192.168.210.236:3010';
 
 export function useSocket() {
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -12,15 +16,21 @@ export function useSocket() {
   const [communityPosts, setCommunityPosts] = useState<CommunityPost[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   
-  // サーバーURL（ローカルストレージ保存対応）
+  // サーバーURL（ローカルストレージ保存対応・モバイル自動検出）
   const [serverUrl, setServerUrl] = useState<string>(() => {
     const saved = localStorage.getItem('chatgame_server_url');
     // 旧ポート3001や不正なURLを最新ポート3010に自動更新
     if (saved && !saved.includes(':3001') && !saved.includes('://:') && saved.length > 8) {
       return saved;
     }
+    
+    // iOS / Android ネイティブアプリの場合はPCのLAN IPを最初から向く
+    if (Capacitor.isNativePlatform()) {
+      return DEFAULT_LAN_SERVER_URL;
+    }
+
     const host = window.location.hostname;
-    // Electron (file://) や localhost, 127.0.0.1 の場合は必ず localhost:3010 を向く
+    // Electron (file://) や localhost, 127.0.0.1 の場合は localhost:3010
     if (!host || host === 'localhost' || host === '127.0.0.1') {
       return 'http://localhost:3010';
     }
@@ -44,6 +54,16 @@ export function useSocket() {
       console.log('Socket 接続成功:', s.id);
       setIsConnected(true);
       s.emit('get_community_data');
+    });
+
+    s.on('connect_error', (err) => {
+      console.warn('Socket 接続エラー:', err.message);
+      // もし localhost:3010 で失敗した場合、PCのLAN IPへ自動フォールバック
+      if (serverUrl === 'http://localhost:3010') {
+        console.log('自動フォールバック: LAN IP (192.168.210.236:3010) を試行します');
+        setServerUrl(DEFAULT_LAN_SERVER_URL);
+        localStorage.setItem('chatgame_server_url', DEFAULT_LAN_SERVER_URL);
+      }
     });
 
     s.on('disconnect', () => {
