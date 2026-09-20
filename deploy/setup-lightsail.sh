@@ -10,7 +10,18 @@ echo "📦 システム更新と必要なツールのインストール中..."
 sudo apt-get update -y
 sudo apt-get install -y curl git ufw
 
-# 2. Node.js 20.x のインストール（NodeSource）
+# 2. スワップメモリ（2GB）の設定（512MB RAMのフリーズ防止）
+if [ ! -f /swapfile ]; then
+    echo "💾 スワップメモリ（2GB）を作成中（メモリ不足防止）..."
+    sudo fallocate -l 2G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048
+    sudo chmod 600 /swapfile
+    sudo mkswap /swapfile
+    sudo swapon /swapfile
+    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab || true
+    echo "✅ スワップメモリ作成完了"
+fi
+
+# 3. Node.js 20.x のインストール（NodeSource）
 if ! command -v node &> /dev/null; then
     echo "🟢 Node.js 20.x をインストール中..."
     curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
@@ -19,28 +30,34 @@ fi
 echo "Node.js バージョン: $(node -v)"
 echo "npm バージョン: $(npm -v)"
 
-# 3. PM2 のインストール
+# 4. PM2 のインストール
 if ! command -v pm2 &> /dev/null; then
     echo "⚙️ PM2 (常時稼働プロセスマネージャ) をインストール中..."
     sudo npm install -g pm2
 fi
 
-# 4. プロジェクトのディレクトリ確認
+# 5. プロジェクトのディレクトリ確認
 cd "$(dirname "$0")/.."
 PROJECT_ROOT=$(pwd)
 echo "プロジェクトディレクトリ: $PROJECT_ROOT"
 
-# 5. クライアントのビルド (Web配信アセット生成)
-echo "💻 Webクライアントをビルド中..."
+# 6. クライアントの確認とビルド
 cd "$PROJECT_ROOT/client"
-npm install
-npm run build
+if [ ! -d "dist" ] || [ ! -f "dist/index.html" ]; then
+    echo "💻 Webクライアントをビルド中..."
+    npm install
+    npm run build
+else
+    echo "✅ ビルド済みWebクライアント(dist)が存在するためビルドをスキップします"
+fi
 
-# 6. サーバーのビルド
-echo "🖥️ サーバーをビルド中..."
+# 7. サーバーの準備と起動
+echo "🖥️ サーバーの準備中..."
 cd "$PROJECT_ROOT/server"
-npm install
-npm run build
+npm install --production || npm install
+if [ ! -f "dist/server.js" ]; then
+    npm run build
+fi
 
 # 7. PM2 でサーバーを起動
 echo "🔥 サーバーを常時稼働プロセスとして起動中..."

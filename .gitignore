@@ -2,11 +2,9 @@
 node_modules/
 package-lock.json
 
-# Builds & Outputs
-client/dist/
+# Builds & Outputs (Keep dist for zero-build Lightsail deployment)
 client/dist-electron/
 release/
-server/dist/
 
 # iOS Pods & build
 client/ios/App/Pods/
