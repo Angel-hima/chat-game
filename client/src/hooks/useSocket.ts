@@ -3,8 +3,8 @@ import { io, Socket } from 'socket.io-client';
 import { Capacitor } from '@capacitor/core';
 import { Room, PublicRoomSummary, ChatMessage, ReactionStamp, CommunityPost, Announcement, Feedback } from '../types';
 
-// 開発PCのローカルネットワークIP（モバイル端末の自動接続先）
-const DEFAULT_LAN_SERVER_URL = 'http://192.168.210.236:3010';
+// AWS Lightsail 本番サーバーURL（デフォルト接続先）
+const DEFAULT_AWS_SERVER_URL = 'http://52.68.217.139:3010';
 
 export function useSocket() {
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -16,29 +16,39 @@ export function useSocket() {
   const [communityPosts, setCommunityPosts] = useState<CommunityPost[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   
-  // サーバーURL（ローカルストレージ保存対応・モバイル自動検出）
+  // サーバーURL（ローカルストレージ保存対応・AWSデフォルト対応）
   const [serverUrl, setServerUrl] = useState<string>(() => {
     const saved = localStorage.getItem('chatgame_server_url');
-    // 旧ポート3001や不正なURLを最新ポート3010に自動更新
-    if (saved && !saved.includes(':3001') && !saved.includes('://:') && saved.length > 8) {
+    // 旧ローカルIPや不正なURLを最新のAWS本番サーバーに自動アップグレード
+    if (
+      saved &&
+      !saved.includes('192.168.') &&
+      !saved.includes('localhost') &&
+      !saved.includes(':3001') &&
+      !saved.includes('://:') &&
+      saved.length > 8
+    ) {
       return saved;
     }
     
-    // iOS / Android ネイティブアプリの場合はPCのLAN IPを最初から向く
+    // iOS / Android ネイティブアプリの場合は最初からAWSサーバーを向く
     if (Capacitor.isNativePlatform()) {
-      return DEFAULT_LAN_SERVER_URL;
+      return DEFAULT_AWS_SERVER_URL;
     }
 
     const host = window.location.hostname;
-    // Electron (file://) や localhost, 127.0.0.1 の場合は localhost:3010
-    if (!host || host === 'localhost' || host === '127.0.0.1') {
-      return 'http://localhost:3010';
+    // Electron (file://) の場合はAWS本番サーバー
+    if (!host || window.location.protocol === 'file:') {
+      return DEFAULT_AWS_SERVER_URL;
     }
-    // リモートWebサーバー（AWS Lightsail等）で開いている場合は現在のURL（オリジン）を使用
-    if (window.location.origin && !window.location.origin.startsWith('file:')) {
+
+    // リモートWebサーバー（AWS Lightsail等）で開いている場合は現在のオリジンを使用
+    if (window.location.origin && !window.location.origin.startsWith('file:') && host !== 'localhost' && host !== '127.0.0.1') {
       return window.location.origin;
     }
-    return `http://${host}:3010`;
+
+    // ローカル開発環境以外はAWS本番サーバーをデフォルトにする
+    return DEFAULT_AWS_SERVER_URL;
   });
 
   const socketRef = useRef<Socket | null>(null);
@@ -62,11 +72,11 @@ export function useSocket() {
 
     s.on('connect_error', (err) => {
       console.warn('Socket 接続エラー:', err.message);
-      // もし localhost:3010 で失敗した場合、PCのLAN IPへ自動フォールバック
-      if (serverUrl === 'http://localhost:3010') {
-        console.log('自動フォールバック: LAN IP (192.168.210.236:3010) を試行します');
-        setServerUrl(DEFAULT_LAN_SERVER_URL);
-        localStorage.setItem('chatgame_server_url', DEFAULT_LAN_SERVER_URL);
+      // 万が一接続に失敗し、かつ現在のURLがAWSでない場合はAWSサーバーへフォールバック
+      if (serverUrl !== DEFAULT_AWS_SERVER_URL) {
+        console.log(`自動フォールバック: AWSサーバー (${DEFAULT_AWS_SERVER_URL}) を試行します`);
+        setServerUrl(DEFAULT_AWS_SERVER_URL);
+        localStorage.setItem('chatgame_server_url', DEFAULT_AWS_SERVER_URL);
       }
     });
 
