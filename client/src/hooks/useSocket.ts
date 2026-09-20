@@ -34,6 +34,10 @@ export function useSocket() {
     if (!host || host === 'localhost' || host === '127.0.0.1') {
       return 'http://localhost:3010';
     }
+    // リモートWebサーバー（AWS Lightsail等）で開いている場合は現在のURL（オリジン）を使用
+    if (window.location.origin && !window.location.origin.startsWith('file:')) {
+      return window.location.origin;
+    }
     return `http://${host}:3010`;
   });
 

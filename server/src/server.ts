@@ -1,5 +1,7 @@
 import express from 'express';
 import http from 'http';
+import path from 'path';
+import fs from 'fs';
 import { Server, Socket } from 'socket.io';
 import cors from 'cors';
 import { RoomManager } from './roomManager';
@@ -407,6 +409,19 @@ io.on('connection', (socket: Socket) => {
   socket.on('leave_room', handleLeave);
   socket.on('disconnect', handleLeave);
 });
+
+// 本番環境用: クライアントビルド（client/dist）の静的配信（オールインワン構成）
+const clientDistPath = path.join(__dirname, '../../client/dist');
+if (fs.existsSync(clientDistPath)) {
+  app.use(express.static(clientDistPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) {
+      return next();
+    }
+    res.sendFile(path.join(clientDistPath, 'index.html'));
+  });
+  console.log(`[Static] Webクライアント静的配信が有効です: ${clientDistPath}`);
+}
 
 const PORT: number = Number(process.env.PORT) || 3010;
 server.listen(PORT, '0.0.0.0', () => {
