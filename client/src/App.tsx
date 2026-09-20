@@ -13,6 +13,7 @@ import { ReportModal } from './components/ReportModal';
 import { HowToPlayModal } from './components/HowToPlayModal';
 import { FeedbackModal } from './components/FeedbackModal';
 import { EditProfileModal } from './components/EditProfileModal';
+import { FriendModal } from './components/FriendModal';
 import { GameMode, Player, Feedback } from './types';
 
 export function App() {
@@ -32,7 +33,12 @@ export function App() {
     addCommunityPost,
     likeCommunityPost,
     sendFeedback,
-    updatePlayerProfile
+    updatePlayerProfile,
+    myFriendCode,
+    friends,
+    friendsStatus,
+    addFriend,
+    removeFriend
   } = useSocket();
 
   // プレイヤー情報（ローカルストレージで永続化）
@@ -51,7 +57,9 @@ export function App() {
   });
   const [showFeedback, setShowFeedback] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [showFriends, setShowFriends] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // 利用規約同意状態 (Apple App Store審査必須)
   const [hasAgreedTerms, setHasAgreedTerms] = useState<boolean>(() => {
@@ -98,6 +106,23 @@ export function App() {
     socket?.emit('report_user', { targetId: id, reason });
   };
 
+  // プレイヤーカードからのワンタップフレンド追加
+  const handleAddFriendFromPlayer = (player: Player) => {
+    if (!player.friendCode) {
+      setErrorMessage('相手のフレンドコードが見つかりませんでした。');
+      setTimeout(() => setErrorMessage(null), 3000);
+      return;
+    }
+    const res = addFriend(player.friendCode, player.name, player.avatar);
+    if (res.success) {
+      setSuccessMessage(res.message);
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } else {
+      setErrorMessage(res.message);
+      setTimeout(() => setErrorMessage(null), 3000);
+    }
+  };
+
   // プロフィール変更・保存（入室中も全員に同期）
   const handleSaveProfile = (newName: string, newAvatar: string) => {
     setPlayerName(newName);
@@ -130,7 +155,7 @@ export function App() {
     }
 
     socket.emit('create_room', {
-      player: { name: playerName, avatar: playerAvatar },
+      player: { name: playerName, avatar: playerAvatar, friendCode: myFriendCode },
       ...data
     }, (res: { success: boolean; room?: any; error?: string }) => {
       if (res.success && res.room) {
@@ -152,7 +177,7 @@ export function App() {
 
     socket.emit('join_room', {
       roomId,
-      player: { name: playerName, avatar: playerAvatar },
+      player: { name: playerName, avatar: playerAvatar, friendCode: myFriendCode },
       passcode
     }, (res: { success: boolean; room?: any; error?: string }) => {
       if (res.success && res.room) {
@@ -226,7 +251,18 @@ export function App() {
         onOpenHowToPlay={() => setShowHowToPlay(true)}
         onOpenFeedback={() => setShowFeedback(true)}
         onOpenEditProfile={() => setShowEditProfile(true)}
+        onOpenFriends={() => setShowFriends(true)}
+        onlineFriendCount={Object.values(friendsStatus).filter(s => s.isOnline).length}
       />
+
+      {/* 成功アラートポップアップ */}
+      {successMessage && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 animate-pop">
+          <div className="bg-emerald-600 text-white font-bold text-xs px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2">
+            <span>✨ {successMessage}</span>
+          </div>
+        </div>
+      )}
 
       {/* 未接続アラートバナー */}
       {!isConnected && (
@@ -234,10 +270,10 @@ export function App() {
           <span>⚠️ リアルタイムサーバーに接続されていません（接続先: {serverUrl}）</span>
           <span className="text-[11px] text-rose-400">※サーバー（server）が起動しているか確認してください</span>
           <button
-            onClick={() => updateServerUrl('http://localhost:3010')}
+            onClick={() => updateServerUrl('http://52.68.217.139:3010')}
             className="underline text-white hover:text-indigo-200 font-bold ml-2"
           >
-            localhost:3010に再接続
+            AWSサーバーに再接続
           </button>
         </div>
       )}
@@ -285,6 +321,8 @@ export function App() {
             onChangeGameMode={handleChangeGameMode}
             onSelectPlayer={(p) => setReportingPlayer(p)}
             onOpenEditProfile={() => setShowEditProfile(true)}
+            onAddFriend={handleAddFriendFromPlayer}
+            friends={friends}
           />
         ) : currentRoom.gameMode === 'talk' ? (
           <TalkGameView
@@ -358,6 +396,20 @@ export function App() {
           onClose={() => setReportingPlayer(null)}
           onBlock={handleBlockPlayer}
           onReport={handleReportPlayer}
+        />
+      )}
+
+      {/* フレンド管理モーダル */}
+      {showFriends && (
+        <FriendModal
+          isOpen={showFriends}
+          onClose={() => setShowFriends(false)}
+          myFriendCode={myFriendCode}
+          friends={friends}
+          friendsStatus={friendsStatus}
+          onAddFriend={addFriend}
+          onRemoveFriend={removeFriend}
+          onJoinRoom={(roomId) => handleJoinRoom(roomId)}
         />
       )}
     </div>

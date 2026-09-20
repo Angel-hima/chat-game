@@ -6,7 +6,16 @@ import { Server, Socket } from 'socket.io';
 import cors from 'cors';
 import { RoomManager } from './roomManager';
 import { CommunityManager } from './communityManager';
-import { ChatMessage, ReactionStamp, Feedback } from './types';
+import { ChatMessage, ReactionStamp, Feedback, FriendStatus } from './types';
+
+// 接続中ユーザーのフレンド管理
+interface ConnectedUser {
+  socketId: string;
+  friendCode: string;
+  name: string;
+  avatar: string;
+}
+const connectedUsers = new Map<string, ConnectedUser>();
 
 const app = express();
 app.use(cors());
@@ -115,8 +124,56 @@ io.on('connection', (socket: Socket) => {
     }
   });
 
+  // 自身のフレンドコード登録
+  socket.on('register_friend_code', (data: { friendCode: string; name: string; avatar: string }) => {
+    connectedUsers.set(socket.id, {
+      socketId: socket.id,
+      friendCode: data.friendCode,
+      name: data.name,
+      avatar: data.avatar
+    });
+  });
+
+  // フレンド一覧のリアルタイムステータス照会
+  socket.on('get_friends_status', (friendCodes: string[], callback) => {
+    if (!Array.isArray(friendCodes) || !callback) return;
+    const statuses: FriendStatus[] = friendCodes.map(code => {
+      let user: ConnectedUser | undefined;
+      for (const u of connectedUsers.values()) {
+        if (u.friendCode === code) {
+          user = u;
+          break;
+        }
+      }
+      if (user) {
+        const room = roomManager.getRoomBySocketId(user.socketId);
+        return {
+          friendCode: code,
+          name: user.name,
+          avatar: user.avatar,
+          isOnline: true,
+          currentRoomId: room ? room.id : undefined,
+          currentRoomName: room ? room.name : undefined
+        };
+      }
+      return {
+        friendCode: code,
+        name: '',
+        avatar: '👤',
+        isOnline: false
+      };
+    });
+    callback(statuses);
+  });
+
   // ルーム入室中のプロフィール変更（名前・アバター）
   socket.on('update_player_profile', (data: { name: string; avatar: string }, callback) => {
+    const existing = connectedUsers.get(socket.id);
+    if (existing) {
+      existing.name = data.name;
+      existing.avatar = data.avatar;
+    }
+
     const result = roomManager.updatePlayerProfile(socket.id, data.name, data.avatar);
     if (result.room) {
       io.to(result.room.id).emit('room_updated', result.room);
@@ -142,7 +199,7 @@ io.on('connection', (socket: Socket) => {
 
   // ルーム作成
   socket.on('create_room', (data: {
-    player: { name: string; avatar: string };
+    player: { name: string; avatar: string; friendCode?: string };
     name: string;
     description?: string;
     isPublic: boolean;
@@ -151,8 +208,17 @@ io.on('connection', (socket: Socket) => {
     gameMode: 'talk' | 'wordwolf';
   }, callback) => {
     try {
+      if (data.player.friendCode) {
+        connectedUsers.set(socket.id, {
+          socketId: socket.id,
+          friendCode: data.player.friendCode,
+          name: data.player.name,
+          avatar: data.player.avatar
+        });
+      }
+
       const room = roomManager.createRoom(
-        { id: socket.id, name: data.player.name, avatar: data.player.avatar },
+        { id: socket.id, name: data.player.name, avatar: data.player.avatar, friendCode: data.player.friendCode },
         data.name,
         data.description,
         data.isPublic,
@@ -179,12 +245,21 @@ io.on('connection', (socket: Socket) => {
   // ルーム参加
   socket.on('join_room', (data: {
     roomId: string;
-    player: { name: string; avatar: string };
+    player: { name: string; avatar: string; friendCode?: string };
     passcode?: string;
   }, callback) => {
+    if (data.player.friendCode) {
+      connectedUsers.set(socket.id, {
+        socketId: socket.id,
+        friendCode: data.player.friendCode,
+        name: data.player.name,
+        avatar: data.player.avatar
+      });
+    }
+
     const result = roomManager.joinRoom(
       data.roomId,
-      { id: socket.id, name: data.player.name, avatar: data.player.avatar },
+      { id: socket.id, name: data.player.name, avatar: data.player.avatar, friendCode: data.player.friendCode },
       data.passcode
     );
 
@@ -407,7 +482,10 @@ io.on('connection', (socket: Socket) => {
   };
 
   socket.on('leave_room', handleLeave);
-  socket.on('disconnect', handleLeave);
+  socket.on('disconnect', () => {
+    connectedUsers.delete(socket.id);
+    handleLeave();
+  });
 });
 
 // 本番環境用: クライアントビルド（client/dist）の静的配信（オールインワン構成）

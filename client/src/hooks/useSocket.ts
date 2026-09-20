@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { Capacitor } from '@capacitor/core';
-import { Room, PublicRoomSummary, ChatMessage, ReactionStamp, CommunityPost, Announcement, Feedback } from '../types';
+import { Room, PublicRoomSummary, ChatMessage, ReactionStamp, CommunityPost, Announcement, Feedback, Friend, FriendStatus } from '../types';
 
 // AWS Lightsail 本番サーバーURL（デフォルト接続先）
 const DEFAULT_AWS_SERVER_URL = 'http://52.68.217.139:3010';
@@ -15,6 +15,30 @@ export function useSocket() {
   const [stamps, setStamps] = useState<ReactionStamp[]>([]);
   const [communityPosts, setCommunityPosts] = useState<CommunityPost[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+
+  // 自分のフレンドコード（ローカルストレージ永続化）
+  const [myFriendCode] = useState<string>(() => {
+    const saved = localStorage.getItem('chatgame_my_friend_code');
+    if (saved && saved.startsWith('FG-')) {
+      return saved;
+    }
+    const generated = `FG-${Math.floor(100000 + Math.random() * 900000)}`;
+    localStorage.setItem('chatgame_my_friend_code', generated);
+    return generated;
+  });
+
+  // フレンドリスト（ローカルストレージ永続化）
+  const [friends, setFriends] = useState<Friend[]>(() => {
+    try {
+      const saved = localStorage.getItem('chatgame_friends');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // フレンドのリアルタイムステータス
+  const [friendsStatus, setFriendsStatus] = useState<Record<string, FriendStatus>>({});
   
   // サーバーURL（ローカルストレージ保存対応・AWSデフォルト対応）
   const [serverUrl, setServerUrl] = useState<string>(() => {
@@ -68,6 +92,11 @@ export function useSocket() {
       console.log('Socket 接続成功:', s.id);
       setIsConnected(true);
       s.emit('get_community_data');
+
+      // 自身のフレンドコードとプロフィールをサーバーに登録
+      const savedName = localStorage.getItem('chatgame_player_name') || 'ゲスト';
+      const savedAvatar = localStorage.getItem('chatgame_player_avatar') || '🐱';
+      s.emit('register_friend_code', { friendCode: myFriendCode, name: savedName, avatar: savedAvatar });
     });
 
     s.on('connect_error', (err) => {
@@ -160,6 +189,57 @@ export function useSocket() {
     });
   };
 
+  // フレンドステータスの取得
+  const fetchFriendsStatus = (list?: Friend[]) => {
+    const targetList = list || friends;
+    if (!socket || !isConnected || targetList.length === 0) return;
+    const codes = targetList.map(f => f.friendCode);
+    socket.emit('get_friends_status', codes, (statuses: FriendStatus[]) => {
+      const map: Record<string, FriendStatus> = {};
+      statuses.forEach(s => {
+        map[s.friendCode] = s;
+      });
+      setFriendsStatus(map);
+    });
+  };
+
+  // 定期的なフレンドステータス同期
+  useEffect(() => {
+    if (!socket || !isConnected || friends.length === 0) return;
+    fetchFriendsStatus();
+    const interval = setInterval(() => {
+      fetchFriendsStatus();
+    }, 8000);
+    return () => clearInterval(interval);
+  }, [socket, isConnected, friends]);
+
+  // フレンド追加
+  const addFriend = (friendCode: string, name?: string, avatar?: string): { success: boolean; message: string } => {
+    const code = friendCode.trim().toUpperCase();
+    if (!code) return { success: false, message: 'フレンドコードを入力してください。' };
+    if (code === myFriendCode) return { success: false, message: '自分自身をフレンドに追加することはできません。' };
+    if (friends.some(f => f.friendCode === code)) return { success: false, message: '既にフレンドに追加されています。' };
+
+    const newFriend: Friend = {
+      friendCode: code,
+      name: name || 'フレンド',
+      avatar: avatar || '🐱',
+      addedAt: Date.now()
+    };
+    const updated = [newFriend, ...friends];
+    setFriends(updated);
+    localStorage.setItem('chatgame_friends', JSON.stringify(updated));
+    fetchFriendsStatus(updated);
+    return { success: true, message: `${newFriend.name} をフレンドに追加しました！` };
+  };
+
+  // フレンド削除
+  const removeFriend = (friendCode: string) => {
+    const updated = friends.filter(f => f.friendCode !== friendCode);
+    setFriends(updated);
+    localStorage.setItem('chatgame_friends', JSON.stringify(updated));
+  };
+
   // ルーム内での名前・アバター変更
   const updatePlayerProfile = (name: string, avatar: string, callback?: (success: boolean) => void) => {
     if (!socket || !isConnected) return;
@@ -184,6 +264,12 @@ export function useSocket() {
     addCommunityPost,
     likeCommunityPost,
     sendFeedback,
-    updatePlayerProfile
+    updatePlayerProfile,
+    myFriendCode,
+    friends,
+    friendsStatus,
+    addFriend,
+    removeFriend,
+    fetchFriendsStatus
   };
 }

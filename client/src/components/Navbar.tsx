@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Wifi, WifiOff, Settings, HelpCircle, MessageSquarePlus, Edit3 } from 'lucide-react';
+import { Wifi, WifiOff, Settings, HelpCircle, MessageSquarePlus, Edit3, Users } from 'lucide-react';
 
 interface NavbarProps {
   isConnected: boolean;
@@ -10,6 +10,8 @@ interface NavbarProps {
   onOpenHowToPlay: () => void;
   onOpenFeedback: () => void;
   onOpenEditProfile: () => void;
+  onOpenFriends: () => void;
+  onlineFriendCount?: number;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -20,7 +22,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   playerAvatar,
   onOpenHowToPlay,
   onOpenFeedback,
-  onOpenEditProfile
+  onOpenEditProfile,
+  onOpenFriends,
+  onlineFriendCount = 0
 }) => {
   const [showSettings, setShowSettings] = useState(false);
   const [inputUrl, setInputUrl] = useState(serverUrl);
@@ -46,6 +50,19 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2.5">
+          {/* フレンドボタン */}
+          <button
+            onClick={onOpenFriends}
+            className="flex items-center gap-1 text-xs font-bold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 px-2.5 py-1.5 rounded-xl border border-slate-700 transition relative"
+            title="フレンド一覧"
+          >
+            <Users className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="hidden sm:inline">フレンド</span>
+            {onlineFriendCount > 0 && (
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
+            )}
+          </button>
+
           {/* 使い方ボタン */}
           <button
             onClick={onOpenHowToPlay}

@@ -7,6 +7,16 @@ export interface Player {
   isHost: boolean;
   isReady: boolean;
   isOnline: boolean;
+  friendCode?: string;     // 永続フレンドコード
+}
+
+export interface FriendStatus {
+  friendCode: string;
+  name: string;
+  avatar: string;
+  isOnline: boolean;
+  currentRoomId?: string;
+  currentRoomName?: string;
 }
 
 export interface ChatMessage {

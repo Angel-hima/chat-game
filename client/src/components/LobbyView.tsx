@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Crown, CheckCircle2, Circle, Play, LogOut, Copy, Check, MessageSquare, HelpCircle, Users, Globe, Lock, Edit3 } from 'lucide-react';
-import { Room, GameMode, Player } from '../types';
+import { Crown, CheckCircle2, Circle, Play, LogOut, Copy, Check, MessageSquare, HelpCircle, Users, Globe, Lock, Edit3, UserPlus } from 'lucide-react';
+import { Room, GameMode, Player, Friend } from '../types';
 
 interface LobbyViewProps {
   room: Room;
@@ -11,6 +11,8 @@ interface LobbyViewProps {
   onChangeGameMode: (mode: GameMode) => void;
   onSelectPlayer?: (player: Player) => void;
   onOpenEditProfile?: () => void;
+  onAddFriend?: (player: Player) => void;
+  friends?: Friend[];
 }
 
 export const LobbyView: React.FC<LobbyViewProps> = ({
@@ -21,7 +23,9 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
   onLeaveRoom,
   onChangeGameMode,
   onSelectPlayer,
-  onOpenEditProfile
+  onOpenEditProfile,
+  onAddFriend,
+  friends = []
 }) => {
   const [copied, setCopied] = useState(false);
   const isHost = room.hostId === currentUserId;
@@ -176,20 +180,43 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
                 </div>
               </div>
 
-              {/* 状態バッジ */}
-              {player.isHost ? (
-                <span className="text-xs font-bold text-amber-400 bg-amber-950/60 border border-amber-500/30 px-2.5 py-1 rounded-xl flex items-center gap-1">
-                  <Crown className="w-3.5 h-3.5" /> ホスト
-                </span>
-              ) : player.isReady ? (
-                <span className="text-xs font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-1 rounded-xl flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> READY
-                </span>
-              ) : (
-                <span className="text-xs font-bold text-slate-500 bg-slate-800 px-2.5 py-1 rounded-xl flex items-center gap-1">
-                  <Circle className="w-3 h-3" /> 待機中
-                </span>
-              )}
+              {/* 状態バッジ & フレンド追加ボタン */}
+              <div className="flex items-center gap-1.5">
+                {player.id !== currentUserId && onAddFriend && (
+                  friends.some(f => f.friendCode === player.friendCode) ? (
+                    <span className="text-[10px] font-bold text-indigo-300 bg-indigo-950/60 border border-indigo-500/30 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                      <Users className="w-2.5 h-2.5" /> フレンド
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddFriend(player);
+                      }}
+                      className="text-[10px] font-bold text-indigo-200 bg-indigo-800/80 hover:bg-indigo-700 px-2 py-1 rounded-lg flex items-center gap-1 border border-indigo-500/40 shadow transition active:scale-95"
+                      title="フレンドに追加"
+                    >
+                      <UserPlus className="w-3 h-3 text-indigo-300" />
+                      <span>追加</span>
+                    </button>
+                  )
+                )}
+
+                {player.isHost ? (
+                  <span className="text-xs font-bold text-amber-400 bg-amber-950/60 border border-amber-500/30 px-2.5 py-1 rounded-xl flex items-center gap-1">
+                    <Crown className="w-3.5 h-3.5" /> ホスト
+                  </span>
+                ) : player.isReady ? (
+                  <span className="text-xs font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-1 rounded-xl flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> READY
+                  </span>
+                ) : (
+                  <span className="text-xs font-bold text-slate-500 bg-slate-800 px-2.5 py-1 rounded-xl flex items-center gap-1">
+                    <Circle className="w-3 h-3" /> 待機中
+                  </span>
+                )}
+              </div>
             </div>
           ))}
         </div>

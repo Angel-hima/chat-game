@@ -11,6 +11,7 @@ const socket_io_1 = require("socket.io");
 const cors_1 = __importDefault(require("cors"));
 const roomManager_1 = require("./roomManager");
 const communityManager_1 = require("./communityManager");
+const connectedUsers = new Map();
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
@@ -105,8 +106,54 @@ io.on('connection', (socket) => {
                 callback({ success: false });
         }
     });
+    // 自身のフレンドコード登録
+    socket.on('register_friend_code', (data) => {
+        connectedUsers.set(socket.id, {
+            socketId: socket.id,
+            friendCode: data.friendCode,
+            name: data.name,
+            avatar: data.avatar
+        });
+    });
+    // フレンド一覧のリアルタイムステータス照会
+    socket.on('get_friends_status', (friendCodes, callback) => {
+        if (!Array.isArray(friendCodes) || !callback)
+            return;
+        const statuses = friendCodes.map(code => {
+            let user;
+            for (const u of connectedUsers.values()) {
+                if (u.friendCode === code) {
+                    user = u;
+                    break;
+                }
+            }
+            if (user) {
+                const room = roomManager.getRoomBySocketId(user.socketId);
+                return {
+                    friendCode: code,
+                    name: user.name,
+                    avatar: user.avatar,
+                    isOnline: true,
+                    currentRoomId: room ? room.id : undefined,
+                    currentRoomName: room ? room.name : undefined
+                };
+            }
+            return {
+                friendCode: code,
+                name: '',
+                avatar: '👤',
+                isOnline: false
+            };
+        });
+        callback(statuses);
+    });
     // ルーム入室中のプロフィール変更（名前・アバター）
     socket.on('update_player_profile', (data, callback) => {
+        const existing = connectedUsers.get(socket.id);
+        if (existing) {
+            existing.name = data.name;
+            existing.avatar = data.avatar;
+        }
         const result = roomManager.updatePlayerProfile(socket.id, data.name, data.avatar);
         if (result.room) {
             io.to(result.room.id).emit('room_updated', result.room);
@@ -134,7 +181,15 @@ io.on('connection', (socket) => {
     // ルーム作成
     socket.on('create_room', (data, callback) => {
         try {
-            const room = roomManager.createRoom({ id: socket.id, name: data.player.name, avatar: data.player.avatar }, data.name, data.description, data.isPublic, data.passcode, data.maxPlayers, data.gameMode);
+            if (data.player.friendCode) {
+                connectedUsers.set(socket.id, {
+                    socketId: socket.id,
+                    friendCode: data.player.friendCode,
+                    name: data.player.name,
+                    avatar: data.player.avatar
+                });
+            }
+            const room = roomManager.createRoom({ id: socket.id, name: data.player.name, avatar: data.player.avatar, friendCode: data.player.friendCode }, data.name, data.description, data.isPublic, data.passcode, data.maxPlayers, data.gameMode);
             socket.join(room.id);
             callback({ success: true, room });
             // 公開部屋なら更新を配信
@@ -150,7 +205,15 @@ io.on('connection', (socket) => {
     });
     // ルーム参加
     socket.on('join_room', (data, callback) => {
-        const result = roomManager.joinRoom(data.roomId, { id: socket.id, name: data.player.name, avatar: data.player.avatar }, data.passcode);
+        if (data.player.friendCode) {
+            connectedUsers.set(socket.id, {
+                socketId: socket.id,
+                friendCode: data.player.friendCode,
+                name: data.player.name,
+                avatar: data.player.avatar
+            });
+        }
+        const result = roomManager.joinRoom(data.roomId, { id: socket.id, name: data.player.name, avatar: data.player.avatar, friendCode: data.player.friendCode }, data.passcode);
         if (result.error || !result.room) {
             callback({ success: false, error: result.error || '入室に失敗しました。' });
             return;
@@ -352,7 +415,10 @@ io.on('connection', (socket) => {
         }
     };
     socket.on('leave_room', handleLeave);
-    socket.on('disconnect', handleLeave);
+    socket.on('disconnect', () => {
+        connectedUsers.delete(socket.id);
+        handleLeave();
+    });
 });
 // 本番環境用: クライアントビルド（client/dist）の静的配信（オールインワン構成）
 const clientDistPath = path_1.default.join(__dirname, '../../client/dist');
