@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Crown, CheckCircle2, Circle, Play, LogOut, Copy, Check, MessageSquare, HelpCircle, Users, Globe, Lock, Edit3, UserPlus } from 'lucide-react';
 import { Room, GameMode, Player, Friend } from '../types';
+import { copyToClipboard } from '../utils/clipboard';
 
 interface LobbyViewProps {
   room: Room;
@@ -31,10 +32,12 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
   const isHost = room.hostId === currentUserId;
   const me = room.players.find(p => p.id === currentUserId);
 
-  const copyRoomCode = () => {
-    navigator.clipboard.writeText(room.id);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyRoomCode = async () => {
+    const success = await copyToClipboard(room.id);
+    if (success) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   // ホスト以外のプレイヤーが全員準備完了しているか

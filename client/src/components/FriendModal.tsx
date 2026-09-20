@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Copy, Check, UserPlus, Trash2, Users, ArrowRightCircle } from 'lucide-react';
 import { Friend, FriendStatus } from '../types';
+import { copyToClipboard } from '../utils/clipboard';
 
 interface FriendModalProps {
   isOpen: boolean;
@@ -29,10 +30,12 @@ export const FriendModal: React.FC<FriendModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText(myFriendCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopyCode = async () => {
+    const success = await copyToClipboard(myFriendCode);
+    if (success) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const handleAdd = (e: React.FormEvent) => {
