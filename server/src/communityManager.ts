@@ -101,9 +101,38 @@ export class CommunityManager {
     return this.announcements;
   }
 
+  // お知らせの追加
+  public addAnnouncement(title: string, content: string, tag: Announcement['tag'], isImportant?: boolean): Announcement {
+    const today = new Date();
+    const dateStr = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`;
+    const newAnno: Announcement = {
+      id: `anno-${Date.now()}`,
+      title: title.trim(),
+      content: content.trim(),
+      date: dateStr,
+      tag,
+      isImportant: !!isImportant
+    };
+    this.announcements.unshift(newAnno);
+    this.saveAnnouncements();
+    return newAnno;
+  }
+
+  // お知らせの削除
+  public deleteAnnouncement(id: string): boolean {
+    const idx = this.announcements.findIndex(a => a.id === id);
+    if (idx >= 0) {
+      this.announcements.splice(idx, 1);
+      this.saveAnnouncements();
+      return true;
+    }
+    return false;
+  }
+
   // お知らせの保存
   public saveAnnouncements() {
     try {
+      this.ensureDataDir();
       fs.writeFileSync(this.announcementFile, JSON.stringify(this.announcements, null, 2), 'utf-8');
     } catch (e) {
       console.error('お知らせファイル保存エラー:', e);

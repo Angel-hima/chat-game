@@ -99,9 +99,36 @@ class CommunityManager {
         this.saveAnnouncements();
         return this.announcements;
     }
+    // お知らせの追加
+    addAnnouncement(title, content, tag, isImportant) {
+        const today = new Date();
+        const dateStr = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`;
+        const newAnno = {
+            id: `anno-${Date.now()}`,
+            title: title.trim(),
+            content: content.trim(),
+            date: dateStr,
+            tag,
+            isImportant: !!isImportant
+        };
+        this.announcements.unshift(newAnno);
+        this.saveAnnouncements();
+        return newAnno;
+    }
+    // お知らせの削除
+    deleteAnnouncement(id) {
+        const idx = this.announcements.findIndex(a => a.id === id);
+        if (idx >= 0) {
+            this.announcements.splice(idx, 1);
+            this.saveAnnouncements();
+            return true;
+        }
+        return false;
+    }
     // お知らせの保存
     saveAnnouncements() {
         try {
+            this.ensureDataDir();
             fs_1.default.writeFileSync(this.announcementFile, JSON.stringify(this.announcements, null, 2), 'utf-8');
         }
         catch (e) {

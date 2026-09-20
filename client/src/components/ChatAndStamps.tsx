@@ -102,13 +102,20 @@ export const ChatAndStamps: React.FC<ChatAndStampsProps> = ({
                   >
                     <span className="text-lg select-none">{msg.senderAvatar}</span>
                     <div className={`max-w-[75%] ${isMe ? 'text-right' : 'text-left'}`}>
-                      <div className="text-[10px] text-slate-400 mb-0.5 font-bold">
-                        {msg.senderName}
+                      <div className={`text-[10px] text-slate-400 mb-0.5 font-bold flex items-center gap-1.5 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                        {msg.senderIsAdmin && (
+                          <span className="bg-gradient-to-r from-amber-400 to-orange-400 text-slate-950 font-black text-[9px] px-1.5 py-0.5 rounded-md shadow-sm">
+                            👑 管理者
+                          </span>
+                        )}
+                        <span>{msg.senderName}</span>
                       </div>
                       <div
                         className={`inline-block px-3 py-2 rounded-2xl text-xs font-medium break-words leading-relaxed shadow ${
                           isMe
                             ? 'bg-indigo-600 text-white rounded-tr-none'
+                            : msg.senderIsAdmin
+                            ? 'bg-slate-900 border border-amber-500/60 text-slate-100 rounded-tl-none shadow-amber-500/10'
                             : 'bg-slate-900 border border-slate-700/80 text-slate-100 rounded-tl-none'
                         }`}
                       >

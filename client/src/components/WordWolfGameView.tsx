@@ -153,8 +153,14 @@ export const WordWolfGameView: React.FC<WordWolfGameViewProps> = ({
                 >
                   <div className="flex items-center gap-3">
                     <span className="text-2xl">{p.avatar}</span>
-                    <div className="text-left font-bold text-sm">
-                      {p.name} {isSelf && '(自分)'}
+                    <div className="text-left font-bold text-sm flex items-center gap-1.5">
+                      <span>{p.name}</span>
+                      {p.isAdmin && (
+                        <span className="text-[9px] font-black bg-gradient-to-r from-amber-400 to-orange-400 text-slate-950 px-1 py-0.2 rounded">
+                          👑 管理者
+                        </span>
+                      )}
+                      {isSelf && <span className="text-xs text-slate-400 font-normal">(自分)</span>}
                     </div>
                   </div>
                   {isSelected && <span className="text-xs font-bold text-amber-400">選択中</span>}

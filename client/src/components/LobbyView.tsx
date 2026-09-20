@@ -172,6 +172,11 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
                         <Edit3 className="w-2.5 h-2.5" /> 名前変更
                       </button>
                     )}
+                    {player.isAdmin && (
+                      <span className="text-[10px] font-black bg-gradient-to-r from-amber-400 to-orange-400 text-slate-950 px-1.5 py-0.5 rounded-md shadow-sm flex items-center gap-0.5">
+                        👑 管理者
+                      </span>
+                    )}
                     {player.isHost && (
                       <Crown className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
                     )}

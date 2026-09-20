@@ -96,10 +96,17 @@ export const TalkGameView: React.FC<TalkGameViewProps> = ({
           {room.players.map((p) => (
             <div
               key={p.id}
-              className="flex items-center gap-1.5 bg-slate-900/80 px-2.5 py-1 rounded-xl border border-slate-700 text-xs text-slate-300 whitespace-nowrap"
+              className={`flex items-center gap-1.5 bg-slate-900/80 px-2.5 py-1 rounded-xl border text-xs text-slate-300 whitespace-nowrap ${
+                p.isAdmin ? 'border-amber-500/50 bg-amber-950/20' : 'border-slate-700'
+              }`}
             >
               <span>{p.avatar}</span>
               <span className="font-semibold">{p.name}</span>
+              {p.isAdmin && (
+                <span className="text-[9px] font-black bg-gradient-to-r from-amber-400 to-orange-400 text-slate-950 px-1 py-0.2 rounded">
+                  👑
+                </span>
+              )}
             </div>
           ))}
         </div>

@@ -6,16 +6,19 @@ import { Server, Socket } from 'socket.io';
 import cors from 'cors';
 import { RoomManager } from './roomManager';
 import { CommunityManager } from './communityManager';
-import { ChatMessage, ReactionStamp, Feedback, FriendStatus } from './types';
+import { AdminManager } from './adminManager';
+import { ChatMessage, ReactionStamp, Feedback, FriendStatus, AdminServerOverview, AdminRoomInfo, AdminUserInfo } from './types';
 
-// 接続中ユーザーのフレンド管理
+// 接続中ユーザーの管理
 interface ConnectedUser {
   socketId: string;
   friendCode: string;
   name: string;
   avatar: string;
+  isAdmin: boolean;
 }
 const connectedUsers = new Map<string, ConnectedUser>();
+const serverStartTime = Date.now();
 
 const app = express();
 app.use(cors());
@@ -31,6 +34,7 @@ const io = new Server(server, {
 
 const roomManager = new RoomManager();
 const communityManager = new CommunityManager();
+const adminManager = new AdminManager();
 
 // ヘルスチェックと公開部屋リスト取得用RESTエンドポイント
 app.get('/api/health', (req, res) => {
@@ -126,12 +130,17 @@ io.on('connection', (socket: Socket) => {
 
   // 自身のフレンドコード登録
   socket.on('register_friend_code', (data: { friendCode: string; name: string; avatar: string }) => {
+    const isAdmin = adminManager.isAdmin(data.friendCode);
     connectedUsers.set(socket.id, {
       socketId: socket.id,
       friendCode: data.friendCode,
       name: data.name,
-      avatar: data.avatar
+      avatar: data.avatar,
+      isAdmin
     });
+    // クライアントへ管理者ステータスを通知
+    socket.emit('admin_status', { isAdmin, friendCode: data.friendCode });
+    console.log(`[Socket] ユーザー登録: ${data.name} (${data.friendCode}) - 管理者: ${isAdmin}`);
   });
 
   // フレンド一覧のリアルタイムステータス照会
@@ -152,6 +161,7 @@ io.on('connection', (socket: Socket) => {
           name: user.name,
           avatar: user.avatar,
           isOnline: true,
+          isAdmin: user.isAdmin,
           currentRoomId: room ? room.id : undefined,
           currentRoomName: room ? room.name : undefined
         };
@@ -160,7 +170,8 @@ io.on('connection', (socket: Socket) => {
         friendCode: code,
         name: '',
         avatar: '👤',
-        isOnline: false
+        isOnline: false,
+        isAdmin: false
       };
     });
     callback(statuses);
@@ -208,17 +219,25 @@ io.on('connection', (socket: Socket) => {
     gameMode: 'talk' | 'wordwolf';
   }, callback) => {
     try {
+      const isAdmin = adminManager.isAdmin(data.player.friendCode);
       if (data.player.friendCode) {
         connectedUsers.set(socket.id, {
           socketId: socket.id,
           friendCode: data.player.friendCode,
           name: data.player.name,
-          avatar: data.player.avatar
+          avatar: data.player.avatar,
+          isAdmin
         });
       }
 
       const room = roomManager.createRoom(
-        { id: socket.id, name: data.player.name, avatar: data.player.avatar, friendCode: data.player.friendCode },
+        {
+          id: socket.id,
+          name: data.player.name,
+          avatar: data.player.avatar,
+          friendCode: data.player.friendCode,
+          isAdmin
+        },
         data.name,
         data.description,
         data.isPublic,
@@ -235,7 +254,7 @@ io.on('connection', (socket: Socket) => {
         broadcastPublicRooms();
       }
 
-      console.log(`[Room] 作成成功: ${room.id} (${room.name}) by ${data.player.name}`);
+      console.log(`[Room] 作成成功: ${room.id} (${room.name}) by ${data.player.name} (管理者: ${isAdmin})`);
     } catch (err: any) {
       console.error('[Room] 作成エラー:', err);
       callback({ success: false, error: '部屋の作成に失敗しました。' });
@@ -248,18 +267,26 @@ io.on('connection', (socket: Socket) => {
     player: { name: string; avatar: string; friendCode?: string };
     passcode?: string;
   }, callback) => {
+    const isAdmin = adminManager.isAdmin(data.player.friendCode);
     if (data.player.friendCode) {
       connectedUsers.set(socket.id, {
         socketId: socket.id,
         friendCode: data.player.friendCode,
         name: data.player.name,
-        avatar: data.player.avatar
+        avatar: data.player.avatar,
+        isAdmin
       });
     }
 
     const result = roomManager.joinRoom(
       data.roomId,
-      { id: socket.id, name: data.player.name, avatar: data.player.avatar, friendCode: data.player.friendCode },
+      {
+        id: socket.id,
+        name: data.player.name,
+        avatar: data.player.avatar,
+        friendCode: data.player.friendCode,
+        isAdmin
+      },
       data.passcode
     );
 
@@ -424,6 +451,8 @@ io.on('connection', (socket: Socket) => {
     const player = currentRoom.players.find(p => p.id === socket.id);
     if (!player) return;
 
+    const isAdmin = player.isAdmin || adminManager.isAdmin(player.friendCode);
+
     const msg: ChatMessage = {
       id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       senderId: player.id,
@@ -431,7 +460,8 @@ io.on('connection', (socket: Socket) => {
       senderAvatar: player.avatar,
       text: text.trim(),
       timestamp: Date.now(),
-      type: 'chat'
+      type: 'chat',
+      senderIsAdmin: isAdmin
     };
 
     io.to(currentRoom.id).emit('chat_message', msg);
@@ -457,6 +487,156 @@ io.on('connection', (socket: Socket) => {
   });
 
   // 退出処理
+  // --- 管理者専用イベント ---
+  const checkAdminAuth = (): boolean => {
+    const user = connectedUsers.get(socket.id);
+    return !!(user && adminManager.isAdmin(user.friendCode));
+  };
+
+  // サーバー全体概要（管理者用）
+  socket.on('admin_get_overview', (callback) => {
+    if (!checkAdminAuth()) {
+      return callback({ error: '管理者権限がありません。' });
+    }
+
+    const allRooms = roomManager.getAllRooms();
+    const roomsInfo: AdminRoomInfo[] = allRooms.map(r => ({
+      id: r.id,
+      name: r.name,
+      description: r.description,
+      isPublic: r.isPublic,
+      passcode: r.passcode,
+      playerCount: r.players.length,
+      maxPlayers: r.maxPlayers,
+      gameMode: r.gameMode,
+      status: r.status,
+      hostName: r.players.find(p => p.id === r.hostId)?.name || '不明',
+      createdAt: r.createdAt,
+      players: r.players.map(p => ({
+        id: p.id,
+        name: p.name,
+        avatar: p.avatar,
+        friendCode: p.friendCode,
+        isAdmin: p.isAdmin,
+        isHost: p.isHost
+      }))
+    }));
+
+    const usersInfo: AdminUserInfo[] = Array.from(connectedUsers.values()).map(u => {
+      const room = roomManager.getRoomBySocketId(u.socketId);
+      return {
+        socketId: u.socketId,
+        friendCode: u.friendCode,
+        name: u.name,
+        avatar: u.avatar,
+        isAdmin: u.isAdmin,
+        currentRoomId: room ? room.id : undefined
+      };
+    });
+
+    const overview: AdminServerOverview = {
+      connectedUserCount: connectedUsers.size,
+      totalRoomsCount: allRooms.length,
+      activeGameCount: allRooms.filter(r => r.status === 'playing').length,
+      serverUptimeSeconds: Math.floor((Date.now() - serverStartTime) / 1000),
+      rooms: roomsInfo,
+      users: usersInfo,
+      adminFriendCodes: adminManager.getAdminCodes()
+    };
+
+    callback({ success: true, overview });
+  });
+
+  // 部屋の強制解散
+  socket.on('admin_close_room', (roomId: string, callback) => {
+    if (!checkAdminAuth()) {
+      return callback && callback({ success: false, error: '管理者権限がありません。' });
+    }
+
+    const closed = roomManager.forceCloseRoom(roomId);
+    if (closed) {
+      io.to(roomId).emit('room_force_closed', { reason: '管理者によって部屋が解散されました。' });
+      // 所属ソケットを退出させる
+      io.in(roomId).socketsLeave(roomId);
+      broadcastPublicRooms();
+      console.log(`[Admin] 管理者により部屋 ${roomId} が強制解散されました。`);
+      if (callback) callback({ success: true });
+    } else {
+      if (callback) callback({ success: false, error: '部屋が見つかりませんでした。' });
+    }
+  });
+
+  // 全体アナウンス（ブロードキャスト）
+  socket.on('admin_broadcast_announcement', (data: { message: string; senderName?: string }, callback) => {
+    if (!checkAdminAuth()) {
+      return callback && callback({ success: false, error: '管理者権限がありません。' });
+    }
+
+    const broadcastData = {
+      id: `annc-${Date.now()}`,
+      message: data.message.trim(),
+      senderName: data.senderName || '管理者',
+      timestamp: Date.now()
+    };
+
+    io.emit('broadcast_announcement', broadcastData);
+    console.log(`[Admin] 全体アナウンス配信: "${data.message}"`);
+    if (callback) callback({ success: true });
+  });
+
+  // 管理者フレンドコードの追加
+  socket.on('admin_add_admin_code', (friendCode: string, callback) => {
+    if (!checkAdminAuth()) {
+      return callback && callback({ success: false, error: '管理者権限がありません。' });
+    }
+
+    const success = adminManager.addAdmin(friendCode);
+    // 対象のオンラインユーザーがいれば即時更新
+    for (const u of connectedUsers.values()) {
+      if (u.friendCode.toUpperCase() === friendCode.trim().toUpperCase()) {
+        u.isAdmin = true;
+        io.to(u.socketId).emit('admin_status', { isAdmin: true, friendCode: u.friendCode });
+      }
+    }
+    if (callback) callback({ success, adminCodes: adminManager.getAdminCodes() });
+  });
+
+  // 管理者フレンドコードの削除
+  socket.on('admin_remove_admin_code', (friendCode: string, callback) => {
+    if (!checkAdminAuth()) {
+      return callback && callback({ success: false, error: '管理者権限がありません。' });
+    }
+
+    const success = adminManager.removeAdmin(friendCode);
+    for (const u of connectedUsers.values()) {
+      if (u.friendCode.toUpperCase() === friendCode.trim().toUpperCase()) {
+        u.isAdmin = false;
+        io.to(u.socketId).emit('admin_status', { isAdmin: false, friendCode: u.friendCode });
+      }
+    }
+    if (callback) callback({ success, adminCodes: adminManager.getAdminCodes() });
+  });
+
+  // 公式お知らせ作成
+  socket.on('admin_create_announcement', (data: { title: string; content: string; tag: any; isImportant?: boolean }, callback) => {
+    if (!checkAdminAuth()) {
+      return callback && callback({ success: false, error: '管理者権限がありません。' });
+    }
+    const anno = communityManager.addAnnouncement(data.title, data.content, data.tag, data.isImportant);
+    broadcastAnnouncements();
+    if (callback) callback({ success: true, announcement: anno });
+  });
+
+  // 公式お知らせ削除
+  socket.on('admin_delete_announcement', (id: string, callback) => {
+    if (!checkAdminAuth()) {
+      return callback && callback({ success: false, error: '管理者権限がありません。' });
+    }
+    const success = communityManager.deleteAnnouncement(id);
+    broadcastAnnouncements();
+    if (callback) callback({ success });
+  });
+
   const handleLeave = () => {
     const result = roomManager.leaveRoom(socket.id);
     if (result.room) {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Wifi, WifiOff, Settings, HelpCircle, MessageSquarePlus, Edit3, Users } from 'lucide-react';
+import { Wifi, WifiOff, Settings, HelpCircle, MessageSquarePlus, Edit3, Users, ShieldAlert } from 'lucide-react';
 
 interface NavbarProps {
   isConnected: boolean;
@@ -12,6 +12,8 @@ interface NavbarProps {
   onOpenEditProfile: () => void;
   onOpenFriends: () => void;
   onlineFriendCount?: number;
+  isAdmin?: boolean;
+  onOpenAdmin?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -24,7 +26,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenFeedback,
   onOpenEditProfile,
   onOpenFriends,
-  onlineFriendCount = 0
+  onlineFriendCount = 0,
+  isAdmin = false,
+  onOpenAdmin
 }) => {
   const [showSettings, setShowSettings] = useState(false);
   const [inputUrl, setInputUrl] = useState(serverUrl);
@@ -50,6 +54,18 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2.5">
+          {/* 管理者ボタン（管理者コード所持者のみ表示） */}
+          {isAdmin && (
+            <button
+              onClick={onOpenAdmin}
+              className="flex items-center gap-1 text-xs font-black text-slate-950 bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-300 hover:to-orange-300 px-2.5 py-1.5 rounded-xl shadow-lg shadow-amber-500/20 transition animate-pulse"
+              title="管理者コントロールパネルを開く"
+            >
+              <ShieldAlert className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">管理者</span>
+            </button>
+          )}
+
           {/* フレンドボタン */}
           <button
             onClick={onOpenFriends}

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { Capacitor } from '@capacitor/core';
-import { Room, PublicRoomSummary, ChatMessage, ReactionStamp, CommunityPost, Announcement, Feedback, Friend, FriendStatus } from '../types';
+import { Room, PublicRoomSummary, ChatMessage, ReactionStamp, CommunityPost, Announcement, Feedback, Friend, FriendStatus, AdminServerOverview, BroadcastAnnouncement } from '../types';
 
 // AWS Lightsail 本番サーバーURL（デフォルト接続先）
 const DEFAULT_AWS_SERVER_URL = 'http://52.68.217.139:3010';
@@ -15,6 +15,9 @@ export function useSocket() {
   const [stamps, setStamps] = useState<ReactionStamp[]>([]);
   const [communityPosts, setCommunityPosts] = useState<CommunityPost[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [broadcastAlert, setBroadcastAlert] = useState<BroadcastAnnouncement | null>(null);
+  const [roomForceClosedReason, setRoomForceClosedReason] = useState<string | null>(null);
 
   // 自分のフレンドコード（ローカルストレージ永続化）
   const [myFriendCode] = useState<string>(() => {
@@ -152,6 +155,23 @@ export function useSocket() {
       }, 2500);
     });
 
+    // 管理者判定ステータス
+    s.on('admin_status', (data: { isAdmin: boolean }) => {
+      console.log('管理者ステータス受信:', data.isAdmin);
+      setIsAdmin(data.isAdmin);
+    });
+
+    // 全体緊急アナウンス
+    s.on('broadcast_announcement', (annc: BroadcastAnnouncement) => {
+      setBroadcastAlert(annc);
+    });
+
+    // 管理者による部屋強制解散
+    s.on('room_force_closed', (data: { reason: string }) => {
+      setCurrentRoom(null);
+      setRoomForceClosedReason(data.reason || '管理者によって部屋が解散されました。');
+    });
+
     return () => {
       s.disconnect();
     };
@@ -248,6 +268,45 @@ export function useSocket() {
     });
   };
 
+  // 管理者操作
+  const adminGetOverview = (callback: (res: { success?: boolean; overview?: AdminServerOverview; error?: string }) => void) => {
+    if (!socket || !isConnected) return callback({ error: 'サーバーに接続されていません' });
+    socket.emit('admin_get_overview', callback);
+  };
+
+  const adminCloseRoom = (roomId: string, callback?: (res: { success: boolean; error?: string }) => void) => {
+    if (!socket || !isConnected) return;
+    socket.emit('admin_close_room', roomId, callback);
+  };
+
+  const adminBroadcast = (message: string, callback?: (res: { success: boolean }) => void) => {
+    if (!socket || !isConnected) return;
+    socket.emit('admin_broadcast_announcement', { message }, callback);
+  };
+
+  const adminAddCode = (friendCode: string, callback?: (res: { success: boolean; adminCodes?: string[] }) => void) => {
+    if (!socket || !isConnected) return;
+    socket.emit('admin_add_admin_code', friendCode, callback);
+  };
+
+  const adminRemoveCode = (friendCode: string, callback?: (res: { success: boolean; adminCodes?: string[] }) => void) => {
+    if (!socket || !isConnected) return;
+    socket.emit('admin_remove_admin_code', friendCode, callback);
+  };
+
+  const adminCreateAnnouncement = (
+    data: { title: string; content: string; tag: any; isImportant?: boolean },
+    callback?: (res: { success: boolean }) => void
+  ) => {
+    if (!socket || !isConnected) return;
+    socket.emit('admin_create_announcement', data, callback);
+  };
+
+  const adminDeleteAnnouncement = (id: string, callback?: (res: { success: boolean }) => void) => {
+    if (!socket || !isConnected) return;
+    socket.emit('admin_delete_announcement', id, callback);
+  };
+
   return {
     socket,
     isConnected,
@@ -270,6 +329,18 @@ export function useSocket() {
     friendsStatus,
     addFriend,
     removeFriend,
-    fetchFriendsStatus
+    fetchFriendsStatus,
+    isAdmin,
+    broadcastAlert,
+    setBroadcastAlert,
+    roomForceClosedReason,
+    setRoomForceClosedReason,
+    adminGetOverview,
+    adminCloseRoom,
+    adminBroadcast,
+    adminAddCode,
+    adminRemoveCode,
+    adminCreateAnnouncement,
+    adminDeleteAnnouncement
   };
 }

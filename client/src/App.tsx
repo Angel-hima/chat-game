@@ -14,6 +14,7 @@ import { HowToPlayModal } from './components/HowToPlayModal';
 import { FeedbackModal } from './components/FeedbackModal';
 import { EditProfileModal } from './components/EditProfileModal';
 import { FriendModal } from './components/FriendModal';
+import { AdminModal } from './components/AdminModal';
 import { GameMode, Player, Feedback } from './types';
 
 export function App() {
@@ -38,7 +39,19 @@ export function App() {
     friends,
     friendsStatus,
     addFriend,
-    removeFriend
+    removeFriend,
+    isAdmin,
+    broadcastAlert,
+    setBroadcastAlert,
+    roomForceClosedReason,
+    setRoomForceClosedReason,
+    adminGetOverview,
+    adminCloseRoom,
+    adminBroadcast,
+    adminAddCode,
+    adminRemoveCode,
+    adminCreateAnnouncement,
+    adminDeleteAnnouncement
   } = useSocket();
 
   // プレイヤー情報（ローカルストレージで永続化）
@@ -58,6 +71,7 @@ export function App() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showFriends, setShowFriends] = useState(false);
+  const [showAdminModal, setShowAdminModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -253,6 +267,8 @@ export function App() {
         onOpenEditProfile={() => setShowEditProfile(true)}
         onOpenFriends={() => setShowFriends(true)}
         onlineFriendCount={Object.values(friendsStatus).filter(s => s.isOnline).length}
+        isAdmin={isAdmin}
+        onOpenAdmin={() => setShowAdminModal(true)}
       />
 
       {/* 成功アラートポップアップ */}
@@ -411,6 +427,71 @@ export function App() {
           onRemoveFriend={removeFriend}
           onJoinRoom={(roomId) => handleJoinRoom(roomId)}
         />
+      )}
+
+      {/* 管理者コントロールパネル */}
+      {showAdminModal && (
+        <AdminModal
+          isOpen={showAdminModal}
+          onClose={() => setShowAdminModal(false)}
+          myFriendCode={myFriendCode}
+          onGetOverview={adminGetOverview}
+          onCloseRoom={adminCloseRoom}
+          onBroadcast={adminBroadcast}
+          onAddCode={adminAddCode}
+          onRemoveCode={adminRemoveCode}
+          onCreateAnnouncement={adminCreateAnnouncement}
+          onDeleteAnnouncement={adminDeleteAnnouncement}
+          announcements={announcements}
+        />
+      )}
+
+      {/* 緊急全体アナウンス受信ポップアップ */}
+      {broadcastAlert && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-pop">
+          <div className="bg-slate-900 border-2 border-amber-500 rounded-3xl max-w-md w-full p-6 text-center space-y-4 shadow-2xl shadow-amber-500/20">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 mx-auto flex items-center justify-center text-2xl font-black">
+              📢
+            </div>
+            <div>
+              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest block mb-1">
+                【重要】{broadcastAlert.senderName} からの緊急アナウンス
+              </span>
+              <p className="text-sm font-extrabold text-white leading-relaxed whitespace-pre-wrap">
+                {broadcastAlert.message}
+              </p>
+            </div>
+            <button
+              onClick={() => setBroadcastAlert(null)}
+              className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow transition"
+            >
+              確認しました
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 部屋強制解散メッセージ */}
+      {roomForceClosedReason && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-pop">
+          <div className="bg-slate-900 border-2 border-rose-500 rounded-3xl max-w-md w-full p-6 text-center space-y-4 shadow-2xl shadow-rose-500/20">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/40 mx-auto flex items-center justify-center text-2xl font-black">
+              🚨
+            </div>
+            <div>
+              <h4 className="text-base font-black text-white mb-1">部屋が解散されました</h4>
+              <p className="text-xs text-rose-300 leading-relaxed">
+                {roomForceClosedReason}
+              </p>
+            </div>
+            <button
+              onClick={() => setRoomForceClosedReason(null)}
+              className="w-full py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-black text-xs rounded-xl shadow transition"
+            >
+              閉じる
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

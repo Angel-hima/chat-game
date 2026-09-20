@@ -8,6 +8,7 @@ export interface Player {
   isReady: boolean;
   isOnline: boolean;
   friendCode?: string;     // 永続フレンドコード
+  isAdmin?: boolean;       // 管理者フラグ
 }
 
 export interface FriendStatus {
@@ -15,6 +16,7 @@ export interface FriendStatus {
   name: string;
   avatar: string;
   isOnline: boolean;
+  isAdmin?: boolean;
   currentRoomId?: string;
   currentRoomName?: string;
 }
@@ -27,6 +29,7 @@ export interface ChatMessage {
   text: string;
   timestamp: number;
   type: 'chat' | 'system';
+  senderIsAdmin?: boolean; // 管理者発言フラグ
 }
 
 export interface ReactionStamp {
@@ -103,3 +106,46 @@ export interface Feedback {
   userName: string;
   createdAt: number;
 }
+
+// 管理者パネル用データ構造
+export interface AdminRoomInfo {
+  id: string;
+  name: string;
+  description?: string;
+  isPublic: boolean;
+  passcode?: string;
+  playerCount: number;
+  maxPlayers: number;
+  gameMode: GameMode;
+  status: 'lobby' | 'playing' | 'result';
+  hostName: string;
+  createdAt: number;
+  players: {
+    id: string;
+    name: string;
+    avatar: string;
+    friendCode?: string;
+    isAdmin?: boolean;
+    isHost: boolean;
+  }[];
+}
+
+export interface AdminUserInfo {
+  socketId: string;
+  friendCode: string;
+  name: string;
+  avatar: string;
+  isAdmin: boolean;
+  currentRoomId?: string;
+}
+
+export interface AdminServerOverview {
+  connectedUserCount: number;
+  totalRoomsCount: number;
+  activeGameCount: number;
+  serverUptimeSeconds: number;
+  rooms: AdminRoomInfo[];
+  users: AdminUserInfo[];
+  adminFriendCodes: string[];
+}
+

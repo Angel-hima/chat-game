@@ -351,4 +351,22 @@ export class RoomManager {
     });
     return room;
   }
+
+  // 管理者用: 全ての部屋（非公開も含む）を取得
+  public getAllRooms(): Room[] {
+    return Array.from(this.rooms.values());
+  }
+
+  // 管理者用: 部屋の強制解散
+  public forceCloseRoom(roomId: string): Room | undefined {
+    const room = this.rooms.get(roomId);
+    if (!room) return undefined;
+
+    this.clearRoomTimer(roomId);
+    for (const player of room.players) {
+      this.socketToRoomId.delete(player.id);
+    }
+    this.rooms.delete(roomId);
+    return room;
+  }
 }
