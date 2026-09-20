@@ -1,73 +1,75 @@
 #!/bin/bash
 set -e
 
+# UTF-8 ロケール設定
+export LC_ALL=C.UTF-8
+export LANG=C.UTF-8
+
 echo "=========================================="
-echo " 🚀 雑談ゲーム AWS Lightsail 自動セットアップ"
+echo " >> Chat Game AWS Lightsail Setup"
 echo "=========================================="
 
-# 1. システムパッケージ更新
-echo "📦 システム更新と必要なツールのインストール中..."
+# 1. System packages update
+echo "[1/7] Updating system packages..."
 sudo apt-get update -y
 sudo apt-get install -y curl git ufw
 
-# 2. スワップメモリ（2GB）の設定（512MB RAMのフリーズ防止）
+# 2. Swap memory (2GB) setup for stability
 if [ ! -f /swapfile ]; then
-    echo "💾 スワップメモリ（2GB）を作成中（メモリ不足防止）..."
+    echo "[2/7] Creating 2GB swap memory..."
     sudo fallocate -l 2G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048
     sudo chmod 600 /swapfile
     sudo mkswap /swapfile
     sudo swapon /swapfile
     echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab || true
-    echo "✅ スワップメモリ作成完了"
+    echo ">> Swap memory created."
 fi
 
-# 3. Node.js 20.x のインストール（NodeSource）
+# 3. Install Node.js 20.x
 if ! command -v node &> /dev/null; then
-    echo "🟢 Node.js 20.x をインストール中..."
+    echo "[3/7] Installing Node.js 20.x..."
     curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
     sudo apt-get install -y nodejs
 fi
-echo "Node.js バージョン: $(node -v)"
-echo "npm バージョン: $(npm -v)"
+echo "Node.js: $(node -v), npm: $(npm -v)"
 
-# 4. PM2 のインストール
+# 4. Install PM2
 if ! command -v pm2 &> /dev/null; then
-    echo "⚙️ PM2 (常時稼働プロセスマネージャ) をインストール中..."
+    echo "[4/7] Installing PM2 process manager..."
     sudo npm install -g pm2
 fi
 
-# 5. プロジェクトのディレクトリ確認
+# 5. Project directory
 cd "$(dirname "$0")/.."
 PROJECT_ROOT=$(pwd)
-echo "プロジェクトディレクトリ: $PROJECT_ROOT"
 
-# 6. クライアントの確認とビルド
+# 6. Prepare Client
 cd "$PROJECT_ROOT/client"
 if [ ! -d "dist" ] || [ ! -f "dist/index.html" ]; then
-    echo "💻 Webクライアントをビルド中..."
+    echo "[5/7] Building Web client..."
     npm install
     npm run build
 else
-    echo "✅ ビルド済みWebクライアント(dist)が存在するためビルドをスキップします"
+    echo "[5/7] Using pre-built Web client (OK)"
 fi
 
-# 7. サーバーの準備と起動
-echo "🖥️ サーバーの準備中..."
+# 7. Prepare Server
+echo "[6/7] Preparing Server..."
 cd "$PROJECT_ROOT/server"
 npm install --production || npm install
 if [ ! -f "dist/server.js" ]; then
     npm run build
 fi
 
-# 7. PM2 でサーバーを起動
-echo "🔥 サーバーを常時稼働プロセスとして起動中..."
+# 8. Start PM2 daemon
+echo "[7/7] Starting game server with PM2..."
 pm2 start ecosystem.config.cjs || pm2 restart ecosystem.config.cjs
 pm2 save
 
-# 8. OS起動時の自動復帰設定
+# 9. Auto-restart on reboot
 sudo env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u $USER --hp $HOME || true
 
-# 9. ファイアウォール (ポート3010) の開放
+# 10. Firewall rule
 sudo ufw allow 3010/tcp || true
 sudo ufw allow 80/tcp || true
 
@@ -75,12 +77,8 @@ PUBLIC_IP=$(curl -s ifconfig.me || hostname -I | awk '{print $1}')
 
 echo ""
 echo "=========================================="
-echo " 🎉 セットアップが完了しました！"
+echo " [SUCCESS] Setup Completed Successfully! "
 echo "=========================================="
-echo "ブラウザで以下のURLを開いてゲームを遊べます："
-echo "👉 http://$PUBLIC_IP:3010"
-echo ""
-echo "※iPadやスマホ、PCから上記のURLを開くだけで自動接続されます。"
-echo "※PM2の稼働状況を確認するには: pm2 status"
-echo "※ログを確認するには: pm2 logs"
+echo "Open in your browser / iPad:"
+echo ">> http://$PUBLIC_IP:3010"
 echo "=========================================="
